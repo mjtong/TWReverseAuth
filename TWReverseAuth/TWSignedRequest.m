@@ -110,30 +110,20 @@ static NSString *gTWConsumerSecret;
     });
 }
 
-// OBFUSCATE YOUR KEYS!
-+ (NSString *)consumerKey
++ (void)setConsumerKey:(NSString *)consumerKey consumerSecret:(NSString *)consumerSecret
 {
     if (!gTWConsumerKey) {
-//        NSBundle* bundle = [NSBundle mainBundle];
-//        gTWConsumerKey = bundle.infoDictionary[TW_CONSUMER_KEY];
-        
-        gTWConsumerKey = kTwitterConsumerKey;
+        //        NSBundle* bundle = [NSBundle mainBundle];
+        //        gTWConsumerKey = bundle.infoDictionary[TW_CONSUMER_KEY];
+        gTWConsumerKey = consumerKey;
     }
-
-    return gTWConsumerKey;
-}
-
-// OBFUSCATE YOUR KEYS!
-+ (NSString *)consumerSecret
-{
+    
     if (!gTWConsumerSecret) {
-//        NSBundle* bundle = [NSBundle mainBundle];
-//        gTWConsumerSecret = bundle.infoDictionary[TW_CONSUMER_SECRET];
+        //        NSBundle* bundle = [NSBundle mainBundle];
+        //        gTWConsumerSecret = bundle.infoDictionary[TW_CONSUMER_SECRET];
         
-        gTWConsumerSecret = kTwitterConsumerSecret;
+        gTWConsumerSecret = consumerSecret;
     }
-
-    return gTWConsumerSecret;
+    
 }
-
 @end
