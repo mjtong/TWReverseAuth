@@ -126,4 +126,15 @@ static NSString *gTWConsumerSecret;
     }
     
 }
+
++ (NSString *)consumerKey
+{
+    return gTWConsumerKey;
+}
+
++ (NSString *)consumerSecret
+{
+    return gTWConsumerKey;
+}
+
 @end
