@@ -2,7 +2,7 @@
 //    TWAPIManager.m
 //    TWiOSReverseAuthExample
 //
-//    Copyright (c) 2012 Sean Cook
+//    Copyright (c) 2013 Sean Cook
 //
 //    Permission is hereby granted, free of charge, to any person obtaining a
 //    copy of this software and associated documentation files (the
@@ -30,50 +30,79 @@
 #import "OAuth+Additions.h"
 #import "TWAPIManager.h"
 #import "TWSignedRequest.h"
-#import "TWAppCredentialStore.h"
 
 typedef void(^TWAPIHandler)(NSData *data, NSError *error);
 
 @implementation TWAPIManager
 
-+(void)registerTwitterAppKey:(NSString *)theAppKey andAppSecret:(NSString *)theAppSecret; {
-  [TWAppCredentialStore registerTwitterAppKey:theAppKey andAppSecret:theAppSecret];
+/**
+ *  Ensures that we have a consumer key and secret configured
+ *
+ */
++ (BOOL)hasAppKeys
+{
+    return ([[TWSignedRequest consumerKey] length] && [[TWSignedRequest consumerSecret] length]);
 }
 
 /**
  *  Returns true if there are local Twitter accounts available for use.
  *
  *  Both iOS5 and iOS6 provide convenience methods to check if accounts are
- *  available locally.  Here, we just call the method that is available at
+ *  available locally. Here, we just call the method that is available at
  *  run-time.
  */
 + (BOOL)isLocalTwitterAccountAvailable
 {
-  return [SLComposeViewController
-          isAvailableForServiceType:SLServiceTypeTwitter];
+    BOOL available = NO;
+
+#if TARGET_IPHONE_SIMULATOR
+
+    /**
+     *  NB: There have been many reports of +[SLComposeViewController isAvailableForServiceType] not
+     *  working on the iOS Simulator. To avoid any confusion, we'll use the more reliable method
+     *  from Twitter.framework.
+     */
+    TWDLog(@"We're running in the Simulator. Using fallback check via Twitter.framework");
+    available = [TWTweetComposeViewController canSendTweet];
+
+#else
+
+    if ([SLComposeViewController class]) {
+        available = [SLComposeViewController isAvailableForServiceType:SLServiceTypeTwitter];
+    }
+    else {
+        available = [TWTweetComposeViewController canSendTweet];
+    }
+
+
+#endif
+
+    TWDLog(@"Returning: %@", (available) ? @"YES": @"NO");
+    return available;
 }
 
 /**
  *  Returns a generic self-signing request that can be used to perform Twitter
  *  API requests.
  *
- *  @param  The URL of the endpoint to retrieve
- *  @dict   The API parameters to include with the request
- *  @requestMethod  The HTTP method to use
+ *  @param              The URL of the endpoint to retrieve
+ *  @dict               The API parameters to include with the request
+ *  @requestMethod      The HTTP method to use
  */
-+ (id<GenericTwitterRequest>)requestWithUrl:(NSURL *)url
-                                 parameters:(NSDictionary *)dict
-                              requestMethod:(SLRequestMethod )requestMethod
+- (id<GenericTwitterRequest>)requestWithUrl:(NSURL *)url parameters:(NSDictionary *)dict requestMethod:(SLRequestMethod )requestMethod
 {
-  NSParameterAssert(url);
-  NSParameterAssert(dict);
-  NSParameterAssert(requestMethod);
-  
-  return (id<GenericTwitterRequest>)
-  [SLRequest requestForServiceType:SLServiceTypeTwitter
-                     requestMethod:requestMethod
-                               URL:url
-                        parameters:dict];
+    NSParameterAssert(url);
+    NSParameterAssert(dict);
+    NSParameterAssert(requestMethod);
+
+    if ([SLRequest class]) {
+        TWDLog(@"Using request class: SLRequest\n");
+        return (id<GenericTwitterRequest>) [SLRequest requestForServiceType:SLServiceTypeTwitter requestMethod:requestMethod URL:url parameters:dict];
+    }
+    else {
+        TWDLog(@"Using request class: TWRequest\n");
+        return (id<GenericTwitterRequest>) [[TWRequest alloc] initWithURL:url parameters:dict requestMethod:requestMethod];
+    }
 }
 
 /**
@@ -82,30 +111,29 @@ typedef void(^TWAPIHandler)(NSData *data, NSError *error);
  *  Responsible for dispatching the result of the call, either sucess or error.
  *
  *  @param account  The local account for which we wish to exchange tokens
- *  @param handler  The block to call upon completion.  Will be called on the
+ *  @param handler  The block to call upon completion. Will be called on the
  *                  main thread.
  */
-+ (void)performReverseAuthForAccount:(ACAccount *)account withHandler:(TWAPIHandler)handler {
-  NSParameterAssert(account);
-  [self _step1WithCompletion:^(NSData *data, NSError *error) {
-    if (!data) {
-      dispatch_async(dispatch_get_main_queue(), ^{
-        handler(nil, error);
-      });
-    }
-    else {
-      NSString *signedReverseAuthSignature =
-      [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-      
-      [self _step2WithAccount:account
-                    signature:signedReverseAuthSignature
-                   andHandler:^(NSData *responseData, NSError *error) {
-                     dispatch_async(dispatch_get_main_queue(), ^{
-                       handler(responseData, error);
-                     });
-                   }];
-    }
-  }];
+- (void)performReverseAuthForAccount:(ACAccount *)account withHandler:(TWAPIHandler)handler
+{
+    NSParameterAssert(account);
+    [self _step1WithCompletion:^(NSData *data, NSError *error) {
+        if (!data) {
+            TWDLog(@"Step 1 FAILED with error %@\n", [error localizedDescription]);
+
+            dispatch_async(dispatch_get_main_queue(), ^{
+                handler(nil, error);
+            });
+        }
+        else {
+            NSString *signedReverseAuthSignature = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            [self _step2WithAccount:account signature:signedReverseAuthSignature andHandler:^(NSData *responseData, NSError *error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    handler(responseData, error);
+                });
+            }];
+        }
+    }];
 }
 
 #define TW_API_ROOT                  @"https://api.twitter.com"
@@ -123,40 +151,29 @@ typedef void(^TWAPIHandler)(NSData *data, NSError *error);
  *  In this step, we send our signed authorization header to Twitter in a
  *  request that is signed by iOS.
  *
- *  @param account The local account for which we wish to exchange tokens
+ *  @param account                      The local account for which we wish to exchange tokens
  *  @param signedReverseAuthSignature   The Authorization: header returned from
  *                                      a successful step 1
- *  @param completion   The block to call when finished.  Can be called on any
- *                      thread.
+ *  @param completion                   The block to call when finished. Can be called on any
+ *                                      thread.
  */
-+ (void)_step2WithAccount:(ACAccount *)account
-                signature:(NSString *)signedReverseAuthSignature
-               andHandler:(TWAPIHandler)completion
+- (void)_step2WithAccount:(ACAccount *)account signature:(NSString *)signedReverseAuthSignature andHandler:(TWAPIHandler)completion
 {
-  NSParameterAssert(account);
-  NSParameterAssert(signedReverseAuthSignature);
-  
-  NSDictionary *step2Params = [NSDictionary
-                               dictionaryWithObjectsAndKeys:
-                               [TWSignedRequest consumerKey],
-                               TW_X_AUTH_REVERSE_TARGET,
-                               signedReverseAuthSignature,
-                               TW_X_AUTH_REVERSE_PARMS,
-                               nil];
-  NSURL *authTokenURL = [NSURL URLWithString:TW_OAUTH_URL_AUTH_TOKEN];
-  id<GenericTwitterRequest> step2Request =
-  [self requestWithUrl:authTokenURL
-            parameters:step2Params
-         requestMethod:SLRequestMethodPOST];
-  
-  [step2Request setAccount:account];
-  [step2Request performRequestWithHandler:
-   ^(NSData *responseData, NSHTTPURLResponse *urlResponse, NSError *error) {
-     dispatch_async(dispatch_get_global_queue
-                    (DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                      completion(responseData, error);
-                    });
-   }];
+    NSParameterAssert(account);
+    NSParameterAssert(signedReverseAuthSignature);
+
+    NSDictionary *step2Params = @{TW_X_AUTH_REVERSE_TARGET: [TWSignedRequest consumerKey], TW_X_AUTH_REVERSE_PARMS: signedReverseAuthSignature};
+    NSURL *authTokenURL = [NSURL URLWithString:TW_OAUTH_URL_AUTH_TOKEN];
+    id<GenericTwitterRequest> step2Request = [self requestWithUrl:authTokenURL parameters:step2Params requestMethod:SLRequestMethodPOST];
+
+    TWDLog(@"Step 2: Sending a request to %@\nparameters %@\n", authTokenURL, step2Params);
+
+    [step2Request setAccount:account];
+    [step2Request performRequestWithHandler:^(NSData *responseData, NSHTTPURLResponse *urlResponse, NSError *error) {
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            completion(responseData, error);
+        });
+    }];
 }
 
 /**
@@ -165,27 +182,21 @@ typedef void(^TWAPIHandler)(NSData *data, NSError *error);
  *  In this step, we sign and send a request to Twitter to obtain an
  *  Authorization: header which we will use in Step 2.
  *
- *  @param completion   The block to call when finished.  Can be called on any
- *                      thread.
+ *  @param completion   The block to call when finished. Can be called on any thread.
  */
-+ (void)_step1WithCompletion:(TWAPIHandler)completion
+- (void)_step1WithCompletion:(TWAPIHandler)completion
 {
-  NSURL *url = [NSURL URLWithString:TW_OAUTH_URL_REQUEST_TOKEN];
-  NSDictionary *dict = [NSDictionary
-                        dictionaryWithObject:TW_X_AUTH_MODE_REVERSE_AUTH
-                        forKey:TW_X_AUTH_MODE_KEY];
-  TWSignedRequest *step1Request = [[TWSignedRequest alloc]
-                                   initWithURL:url
-                                   parameters:dict
-                                   requestMethod:TWSignedRequestMethodPOST];
-  
-  [step1Request performRequestWithHandler:
-   ^(NSData *data, NSURLResponse *response, NSError *error) {
-     dispatch_async(dispatch_get_global_queue
-                    (DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                      completion(data, error);
-                    });
-   }];
+    NSURL *url = [NSURL URLWithString:TW_OAUTH_URL_REQUEST_TOKEN];
+    NSDictionary *dict = @{TW_X_AUTH_MODE_KEY: TW_X_AUTH_MODE_REVERSE_AUTH};
+    TWSignedRequest *step1Request = [[TWSignedRequest alloc] initWithURL:url parameters:dict requestMethod:TWSignedRequestMethodPOST];
+
+    TWDLog(@"Step 1: Sending a request to %@\nparameters %@\n", url, dict);
+
+    [step1Request performRequestWithHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            completion(data, error);
+        });
+    }];
 }
 
 @end

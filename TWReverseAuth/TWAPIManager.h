@@ -2,7 +2,7 @@
 //    TWAPIManager.h
 //    TWiOSReverseAuthExample
 //
-//    Copyright (c) 2012 Sean Cook
+//    Copyright (c) 2013 Sean Cook
 //
 //    Permission is hereby granted, free of charge, to any person obtaining a
 //    copy of this software and associated documentation files (the
@@ -25,9 +25,6 @@
 //
 
 #import <Foundation/Foundation.h>
-#import <Accounts/Accounts.h>
-#import <Social/Social.h>
-#import <Twitter/Twitter.h>
 
 //  The SLRequest and TWRequest share method signatures, so we can use this
 //  protocol to hush any compiler warnings
@@ -44,10 +41,9 @@ typedef void(^ReverseAuthResponseHandler)(NSData *responseData, NSError *error);
 
 @interface TWAPIManager : NSObject
 
-+(void)registerTwitterAppKey:(NSString *)theAppKey andAppSecret:(NSString *)theAppSecret;
 /**
- *  Obtains the access token and secret for |account| using either TWRequest or
- *  SLRequest.
+ *  Obtains the access token and secret for |account| using either `TWRequest` or
+ *  `SLRequest`.
  *
  *  There are two steps required for Reverse Auth:
  *
@@ -61,19 +57,22 @@ typedef void(^ReverseAuthResponseHandler)(NSData *responseData, NSError *error);
  *      be used in conjunction with your consumer key and secret to make
  *      authenticated calls to Twitter.
  */
-+ (void)performReverseAuthForAccount:(ACAccount *)account withHandler:(ReverseAuthResponseHandler)handler;
+- (void)performReverseAuthForAccount:(ACAccount *)account withHandler:(ReverseAuthResponseHandler)handler;
 
 /**
  *  Returns an instance of either SLRequest or TWRequest, depending on runtime
  *  availability.
  */
-+ (id<GenericTwitterRequest>)requestWithUrl:(NSURL *)url
-                                 parameters:(NSDictionary *)dict
-                              requestMethod:(SLRequestMethod )requestMethod;
+- (id<GenericTwitterRequest>)requestWithUrl:(NSURL *)url parameters:(NSDictionary *)dict requestMethod:(SLRequestMethod )requestMethod;
 
 /**
  * Returns true if there are local Twitter accounts available.
  */
 + (BOOL)isLocalTwitterAccountAvailable;
+
+/**
+ * Returns true if the Info.plist is configured properly.
+ */
++ (BOOL)hasAppKeys;
 
 @end
