@@ -48,7 +48,7 @@ typedef void(^TWSignedRequestHandler) (NSData *data, NSURLResponse *response, NS
 - (void)performRequestWithHandler:(TWSignedRequestHandler)handler;
 
 // You should ensure that you obfuscate your keys before shipping
-+ (void)setConsumerKey:(NSString *)consumerKey consumerSecret:(NSString *)consumerSecret
++ (void)setConsumerKey:(NSString *)consumerKey consumerSecret:(NSString *)consumerSecret;
 
 + (NSString *)consumerKey;
 + (NSString *)consumerSecret;
