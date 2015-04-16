@@ -134,7 +134,7 @@ static NSString *gTWConsumerSecret;
 
 + (NSString *)consumerSecret
 {
-    return gTWConsumerKey;
+    return gTWConsumerSecret;
 }
 
 @end
